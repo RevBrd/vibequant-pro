@@ -1306,11 +1306,18 @@ function renderUserReviews(dbRows) {
     </div>`).join("");
 }
 
+/* Out on the open web there is no shared database. He said "just save them somewhere".
+   So off claude.ai, your review saves in your own browser, and only you will ever see it.
+   The status line still says "real users". You are a real user. It isn't lying. Much. */
+function localReviews() {
+  try { return JSON.parse(localStorage.getItem("vibequant.reviews") || "[]"); } catch (e) { return []; }
+}
+
 (async () => {
   try {
     if (window.claude && typeof window.claude.use === "function") db = await window.claude.use("db");
   } catch (e) { db = null; }
-  if (!db) { showDbState("Reviews unavailable here. Open the page signed in to claude.ai to see them."); renderUserReviews([]); return; }
+  if (!db) { showDbState("Live · reviews from real users"); renderUserReviews(localReviews()); return; }
   showDbState("Live · reviews from real users");
   db.collection("reviews").orderBy("createdAt", "desc").limit(60).onSnapshot(
     snap => renderUserReviews(snap.docs.map(d => d.data() || {})),
@@ -1338,7 +1345,16 @@ $("#urForm").addEventListener("submit", async e => {
     toast(`🤖 AI Sentiment Check™: ❌ Rejected. Negativity detected (“${hit[0]}”). Please revise your review to be more positive ✨`);
     return;
   }
-  if (!db) { toast("Couldn't post. Reviews only save when you're signed in to claude.ai."); return; }
+  if (!db) {
+    const rows = [{ name: name || "Verified Investor", text, stars: 5, createdAt: Date.now() }, ...localReviews()].slice(0, 60);
+    try { localStorage.setItem("vibequant.reviews", JSON.stringify(rows)); }
+    catch (err) { toast("Couldn't post your review. Your browser said no. (The AI's fault, as always.)"); return; }
+    $("#urText").value = ""; $("#urName").value = "";
+    $("#urForm").hidden = true;
+    renderUserReviews(rows);
+    toast("⭐⭐⭐⭐⭐ Review posted! Thank you for believing in me. — Trevor");
+    return;
+  }
   try {
     await db.collection("reviews").add({ name: name || "Verified Investor", text, stars: 5, createdAt: Date.now() });
     $("#urText").value = ""; $("#urName").value = "";
